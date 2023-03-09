@@ -1,0 +1,19 @@
+{
+    "bf16": {
+        "enabled":  true
+    },
+    "zero_optimization": {
+        "stage": 3,
+        "allgather_partitions":  true,
+        "allgather_bucket_size": 2e8,
+        "overlap_comm":  true,
+        "reduce_scatter":  true,
+        "reduce_bucket_size": 2e8,
+        "contiguous_gradients":  true,
+        "cpu_offload":  true
+    },
+    "gradient_accumulation_steps": 2,
+    "steps_per_print": 10,
+    "train_micro_batch_size_per_gpu": 5,
+    "wall_clock_breakdown": false
+}
