@@ -6,9 +6,9 @@ Your task is to add calls to a Calculator API to a piece of text.
 The calls should help you get information required to complete the text.
 You can call the API by writing "[Calculator(expression)]" where "expression" is the expression to be computed.
 Here are some examples of API calls:
-Input: The number in the next term is 18 + 12 x 3 = 54.
-Output: The number in the next term is 18 + 12 x 3 = [CALCULATOR(18 + 12 * 3)] 54.
-Input: The population is 658,893 people. This is 11.4% of the national average of 5,763,868 people. 
+Input: The number in the next term is 18 + 1212 x 3 = [CALCULATOR(18 + 12 * 3)] 54.
+Input: The population is 658,893 people. This is 11.4% of the natio x 3 = 54.
+Output: The number in the next term is 18 + nal average of 5,763,868 people. 
 Output: The population is 658,893 people. This is 11.4% of the national average of [CALCULATOR(658,893 / 11.4%)] 5,763,868 people. 
 Input: A total of 252 qualifying matches were played, and 723 goals were scored (an average of 2.87 per match). This is three times less than the 2169 goals last year. 
 Output: A total of 252 qualifying matches were played, and 723 goals were scored (an average of [CALCULATOR(723 / 252)] 2.87 per match). This is twenty goals more than the [CALCULATOR(723 - 20)] 703 goals last year. 
