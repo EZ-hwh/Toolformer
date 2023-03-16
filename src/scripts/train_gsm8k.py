@@ -39,7 +39,7 @@ def main():
     tf = Toolformer(args, ds_config)
 
     data_files = {'train': '../../dataset/train.jsonl', 'test': '../../dataset/test.jsonl'}
-    dataset = load_dataset('json', data_files=data_files, split='train').select(range(2500))
+    dataset = load_dataset('json', data_files=data_files, split='train').select(range(2))
     #dataset = load_dataset("gsm8k", 'main', split="train").select(range(2))
     dataset = dataset.rename_column('question', 'input')
     dataset = dataset.rename_column('answer', 'label') # TODO: remove math annotations from answers

@@ -103,11 +103,13 @@ class TwoStepToolSampler:
         for inputs in tqdm(data_iter, desc='Sampling topk positions'):
             with torch.no_grad():
                 model_inputs = {k: v.to(self.args.device) for k, v in inputs.items() if k != 'target_mask'}
+                print(model_inputs)#FIXME
                 out = self.model(**model_inputs)
                 # FIXME: 添加了一个Softmax层，变成按照生成概率进行采样
                 #api_prob_at_idx = out.logits[:, :, self.tool_call_token_id] # 采样所有生成的token中，[的概率
                 api_prob_at_idx = torch.softmax(out.logits, dim=-1)[:, :, self.tool_call_token_id] # 采样所有生成的token中，[的概率
                 api_prob_at_idx[inputs['target_mask'] == 0] = -10000 # 将padding的位置的概率设为-10000, FIXME: 写的有问题
+                print(api_prob_at_idx)#FIXME
                 api_topk = api_prob_at_idx.topk(self.top_k) # 采样TopK的位置
                 api_topk_idx, api_topk_prob = api_topk.indices, api_topk.values
                 all_pred_ids.append(api_topk_idx.detach())
@@ -128,7 +130,7 @@ class TwoStepToolSampler:
                                     + self.tokenizer.decode(torch.tensor(self.tool_call_token_id).unsqueeze(-1), skip_special_tokens=True),
                             'attention_mask': torch.cat([x['attention_mask'][:x['pos_idx'] + 1], torch.tensor(1).unsqueeze(-1)], -1),
                             'suffix': self.tokenizer.decode(x['input_ids'][x['pos_idx'] + 1:], skip_special_tokens=True)})
-
+        print(dataset_at_idx.__len__())
         #print(dataset_at_idx[0])
         suffixes_ds = dataset_at_idx.map(lambda x: {'suffix': x['suffix']})
         nsuffixes_ds = Dataset.from_dict({'suffix': [i['suffix'] for i in suffixes_ds for _ in range(self.num_seq_per_pos)]})
