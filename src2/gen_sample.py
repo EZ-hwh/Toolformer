@@ -1,4 +1,3 @@
-import logging
 import re
 import argparse
 import torch
@@ -23,15 +22,6 @@ def prepare_dataset_for_sampling(dataset, tokenizer, tool):
     print(tokenizer.decode(encoded_dataset[1]['input_ids']))
     return encoded_dataset
 
-def postprocess_samples(all_preds, dataset, tool, is_causal_model, duplicate_samples):
-    pred_ds = Dataset.from_dict({'text': all_preds,
-                                 'prompt': [tool.get_prompt_template().format(z['label']) for z in dataset for _ in range(duplicate_samples)]})
-    if is_causal_model:
-        return pred_ds.map(lambda x: {'text': x['text'][len(x['prompt']):].split(']')[0] + ']'})
-        #return pred_ds.map(lambda x: {'text': x['text'][x['text'].rindex('Output: ') + len('Output: '):].split(']')[0] + ']'})
-    else:
-        return pred_ds.map(lambda x: {'text': x['text'].split(']')[0] + ']'})
-
 class APISampler():
     def __init__(self, model, tokenizer, top_k, num_seq_per_pos, tau_s=5e-2,tau_f=1):
         self.model = model
@@ -49,13 +39,15 @@ class APISampler():
         #first, generate api position
         self.__gen_topk_pos()
         print(self.dataset.__len__())
+        self.dataset.to_json("sample_topk.jsonl")
         #second, generate api call
         self.__gen_call()
         print(self.dataset.__len__())
+        self.dataset.to_json("sample_api.jsonl")
         #third, filter
         self.__filter()
         print(self.dataset.__len__())
-        self.dataset.to_json("sample1.jsonl")
+        self.dataset.to_json("sample_api_filter.jsonl")
     def __gen_topk_pos(self):
         data_loader = DataLoader(self.dataset)
         all_pred_ids = []
@@ -74,7 +66,7 @@ class APISampler():
         a,b=torch.cat(all_pred_ids, 0), torch.cat(all_pred_probs, 0)
         dataset=Dataset.from_dict({col: [] for col in self.dataset.column_names})
         for i in range(self.top_k):
-            tmp=self.dataset.map(lambda x,idx:{'pos':a[idx,i].item(),'prob':b[idx,i].item(),'n':a[idx,i].item()-len(x['input_ids']+len(x['label_ids']))},with_indices=True).remove_columns('target_mask')
+            tmp=self.dataset.map(lambda x,idx:{'pos':a[idx,i].item(),'prob':b[idx,i].item(),'n':a[idx,i].item()-len(x['input_ids'])+len(x['label_ids'])},with_indices=True).remove_columns('target_mask')
             tmp=tmp.filter(lambda x:x['prob']>self.tau_s)
             dataset=concatenate_datasets([dataset,tmp])
         self.dataset=dataset
@@ -102,24 +94,23 @@ class APISampler():
         dataset=dataset.filter(lambda x:len(x['answer'])!=0)
         self.dataset=dataset
     def __filter(self):
-        self.dataset=self.dataset.map(lambda x:{'P':self.tool.API_CALL_PREFIX +x['api']+' -> '+x['answer']+']','N':self.tool.API_CALL_PREFIX +x['api']+' -> ]'})
+        self.dataset=self.dataset.map(lambda x:{'P':' [' +x['api']+' -> '+x['answer']+']','N':' [' +x['api']+' -> ]'})
         #calculate L()
         self.dataset=self.dataset.map(lambda x:{"input_ids":x['label_ids']})
         self.__cal_loss('L')
         #calculate L(z)
         self.dataset=self.dataset.map(lambda x:{"input_ids":self.tokenizer(x['N'])['input_ids']+list(x['label_ids'])})
-        self.__cal_loss("Lz")
+        self.__cal_loss('Lz')
         #calculate L(z,ans)
         self.dataset=self.dataset.map(lambda x:{"input_ids":self.tokenizer(x['P'])['input_ids']+list(x['label_ids'])})
-        self.__cal_loss("Lza")
+        self.__cal_loss('Lza')
         #filter
-        a=self.dataset.__getitem__(0)
-        print(a['Lza'],a['Lz'],a['L'])
+        self.dataset.to_json("sample_api_before_filter.jsonl")
         self.dataset=self.dataset.filter(lambda x:x['Lza']<min(x['L'],x['Lz'])-self.tau_f)
     def __cal_loss(self,name):
-        self.dataset=self.dataset.map(lambda x:{"attention_mask":(len(x['input_ids']))*[1],"pos":x["n"]+len(x['input_ids']-len(x['label_ids']))})
-        self.dataset.set_format(columns=['input_ids','attention_mask','pos'], type='torch')
-        data_loader=DataLoader(self.dataset)
+        dataset=self.dataset.map(lambda x:{"attention_mask":(len(x['input_ids']))*[1],"pos":x["n"]+len(x['input_ids'])-len(x['label_ids'])})
+        dataset.set_format(columns=['input_ids','attention_mask','pos'], type='torch')
+        data_loader=DataLoader(dataset)
         loss_list=[]
         for inputs in tqdm(data_loader,desc="Cal "+name):
             with torch.no_grad():
@@ -130,10 +121,12 @@ class APISampler():
                 w=1
                 l=0
                 pos=inputs['pos'].item()
+                sum_w=0
                 for i in range(pos,min(pos+5,p.shape[0]-1)):
                     l-=w*torch.log(p[i][inputs['input_ids'][0][i+1]]).item()
+                    sum_w+=w
                     w-=0.2
-                loss_list.append(l)
+                loss_list.append(0 if sum_w==0 else l/sum_w)
         self.dataset=self.dataset.add_column(name,loss_list)
 
                 
@@ -151,7 +144,7 @@ def main():
     model=engine.module
     model.eval()
     data_files = {'train': '../dataset/train.jsonl', 'test': '../dataset/test.jsonl'}
-    dataset = load_dataset('json', data_files=data_files, split='train').select(range(25))
+    dataset = load_dataset('json', data_files=data_files, split='train').select(range(2500))
     dataset = dataset.rename_column('question', 'input')
     dataset = dataset.rename_column('answer', 'label')
     dataset = dataset.map(lambda x: {'input': x['input'],

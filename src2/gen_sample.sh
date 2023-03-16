@@ -1,0 +1,1 @@
+deepspeed --num_gpus 1 gen_sample.py
